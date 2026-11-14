@@ -1,4 +1,6 @@
 import os
+import threading
+import time
 import torch
 from manga_ocr import MangaOcr
 import cv2
@@ -13,6 +15,13 @@ from pathlib import Path
 import platform
 
 torch.set_num_threads( os.cpu_count() )
+
+# Requests run on grpc's worker threads. Unlike the main thread, those don't have the CPU's flush-denormals
+# mode enabled, and the text detector's network then hits denormal floats, which the CPU handles very slowly:
+# ~24 s instead of ~0.35 s per 4K frame (measured). The flag is per thread, so set it on every entry point.
+# It only changes values too small to matter, and matches how the main thread already runs.
+def use_fast_float_mode():
+    torch.set_flush_denormal( True )
 
 class PartialRecognition:
     image: np.ndarray
@@ -33,7 +42,34 @@ class MangaOcrService:
     partial_recognitions: Dict[ str, PartialRecognition ] = {}
 
     def __init__(self) -> None:
+        self._init_lock = threading.Lock()
         self.is_model_downloaded()
+
+    # Loads the models once. Requests that arrive while a warm-up is loading them wait for it
+    # instead of loading a second copy (or using a half-initialized service).
+    def init_once( self ):
+        use_fast_float_mode()
+        if self.manga_ocr and self.comic_text_detector:
+            return
+        with self._init_lock:
+            if not ( self.manga_ocr and self.comic_text_detector ):
+                self.init()
+
+    # Loads the models and runs one tiny inference in the background, so the first Alt+J after startup
+    # doesn't pay for model loading (and, on CUDA, kernel initialization).
+    def warm_up( self ):
+        def run():
+            try:
+                started_at = time.perf_counter()
+                self.init_once()
+                blank = np.full( (64, 64, 3), 255, dtype=np.uint8 )
+                self.comic_text_detector.detect( blank )
+                self.manga_ocr( Image.fromarray( blank ) )
+                print( f'MangaOCR warm-up done ({ (time.perf_counter() - started_at) * 1000:.0f}ms, device: {self.comic_text_detector.device})' )
+            except Exception as error:
+                print( f'MangaOCR warm-up failed: {error}' )
+
+        threading.Thread( target=run, daemon=True ).start()
 
     def init( self ):
 
@@ -118,8 +154,7 @@ class MangaOcrService:
         detection_only: bool = False # skip recognition and hold data
     ) -> RecognizeDefaultResponse:
         
-        if not self.manga_ocr:
-            self.init()
+        self.init_once()
     
         if detection_only:
             pass # self.remove_old_recognitions()
@@ -186,8 +221,7 @@ class MangaOcrService:
         result_ids: List[str] = []
     ) -> RecognizeDefaultResponse | None:
         
-        if not self.manga_ocr:
-            self.init()
+        self.init_once()
 
         previous_recognition = self.partial_recognitions.get( request_id )
 

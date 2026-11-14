@@ -319,6 +319,10 @@ def serve( port: str = '23456', executor: ProcessPoolExecutor = None ):
     server_info = f'[INFO-JSON]:{server_data}'
     print( server_info.replace("'", '"') )
 
+    # Load the Manga OCR models in the background now instead of on the first request
+    if servicer.manga_ocr_service:
+        servicer.manga_ocr_service.warm_up()
+
     # Start the timeout check in a new thread
     # timeout_thread = threading.Thread(target=servicer.timeout_check)
     # timeout_thread.start()
