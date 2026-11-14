@@ -149,3 +149,49 @@ C="$LOCALAPPDATA/electron-builder/Cache/winCodeSign"
 7z x -snl- -o"$C/winCodeSign-2.6.0" "$C"/<downloaded-number>.7z
 ```
 The installer is written to `yomininja-e/dist/`. It's unsigned, so SmartScreen will warn on first run.
+
+For faster iteration, skip the installer and only update `dist/win-unpacked`:
+```
+npm run build-renderer && npm run build-electron
+npx cross-env TARGET_ARCH=x64 electron-builder --dir --config electron-builder.config.js
+```
+
+## Measuring performance
+
+**In the app.** Every scan logs one line with the time spent in each stage since the hotkey press. Start the
+app with `ELECTRON_ENABLE_LOGGING=1` to see it on the console:
+```
+[ocr-timing] total=1020ms | debounce=51 grab=219 debounce=0 source=0 bounds=1 engine=744 json=1 send=4 overlay=0 | PpOcrAdapter
+```
+- `grab` is the screenshot.
+- `engine` is the OCR engine.
+- The screen-capture page also logs `[grab-timing]`, which splits `grab` into frame wait, draw and JPEG encode.
+
+**OCR engines on their own** (`yomininja-e/tools/bench/`):
+```
+# Test images with known Japanese text (any Python with Pillow)
+ocr_services/py_ocr_service/python/win32/x64/python.exe -I yomininja-e/tools/bench/make_bench_image.py <dir> 3840 2160
+
+cd yomininja-e
+# PaddleOCR: runtimes/thread counts, latency + character error rate; --load N simulates a game using N threads
+node tools/bench/bench_ppocr.js --images <dir> --matrix full --load 8
+# Manga OCR through the Python service (use --python <python.exe> to test another environment, e.g. CUDA PyTorch)
+node tools/bench/bench_mangaocr.js --images <dir>
+```
+
+Reference numbers, 4K screenshot, i9-14900HX + RTX 4090 Laptop GPU:
+
+| Engine | Before | After |
+|---|---|---|
+| PaddleOCR (engine only) | ONNX, 32 threads: ~1.5 s, up to 4 s in the app | OpenVINO, 8 threads: ~0.25 s (bench), 0.7–0.9 s (text-heavy desktop) |
+| Manga OCR, full recognition | 27.6 s (CPU) | 2.0 s (CPU), 0.57 s (CUDA) |
+| Screenshot (`grab`) | up to ~810 ms | 108–276 ms |
+
+**GPU for Manga OCR.** Install the CUDA build of the same PyTorch version into the Python environment the app uses
+(`%APPDATA%\YomiNinja\bin\py_ocr_service\python`, with YomiNinja closed). Versions are pinned because the in-app
+installer pulls the newest PyTorch, which may not match the bundled `transformers`:
+```
+python.exe -m pip uninstall -y torch torchvision
+python.exe -m pip install torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cu128
+```
+The YomiNinja installer deletes that folder, so do this after (re)installing.
