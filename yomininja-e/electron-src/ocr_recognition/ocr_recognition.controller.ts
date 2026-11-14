@@ -20,6 +20,7 @@ import { cloneDeep, find } from 'lodash';
 import { Notification } from 'electron';
 import { pushInAppNotification } from "../common/notification_helpers";
 import { HardwareAccelerationOption } from "../@core/application/adapters/ocr.adapter";
+import { ocrTiming } from "../util/ocr_timing.util";
 
 export type Recognition_Output = {
     result: OcrResultScalable | null;
@@ -159,8 +160,6 @@ export class OcrRecognitionController {
         this.recognizing = true;
         
         try {
-            // console.log('');
-            console.time('Recognition time');
             // console.log(activeProfile);
             // console.log('OcrRecognitionController.recognize')
 
@@ -170,6 +169,7 @@ export class OcrRecognitionController {
                 engineName,
                 autoMode: false
             });
+            ocrTiming.mark('engine');
             this.recognizing = false;
 
             // Throwing away current response an returning newest call result
@@ -217,6 +217,7 @@ export class OcrRecognitionController {
                 resultJson = await this.ocrResultToJson( ocrResultScalable );
                 this.ocrRequestImageBuffer = image;
             }
+            ocrTiming.mark('json');
 
             this.result = resultJson || null;
 
@@ -225,14 +226,14 @@ export class OcrRecognitionController {
                 'ocr:result',
                 this.result?.toJson() || null
             );
+            ocrTiming.mark('send');
 
         } catch (error) {
             console.error( error );
         }
-        
+
         this.recognizing = false;
 
-        console.timeEnd('Recognition time');
         return response;
     }
 

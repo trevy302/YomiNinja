@@ -27,6 +27,7 @@ import { screenCapturerController } from "../screen_capturer/screen_capturer.ind
 import { ICONS_DIR } from "../util/directories.util";
 import { join } from "path";
 import { sleep } from "../util/sleep.util";
+import { ocrTiming } from "../util/ocr_timing.util";
 import electronIsDev from "electron-is-dev";
 import { ipcMain } from "../common/ipc_main";
 import { isLinux, isWaylandDisplay, isWindows, isMacOS } from "../util/environment.util";
@@ -200,8 +201,9 @@ export class AppController {
             }
         );
 
-        screenCapturerController.onScreenshot( 
+        screenCapturerController.onScreenshot(
             async ( image: Buffer ) => {
+                ocrTiming.mark('grab');
                 return await this.handleOcrCommand({
                     ...cloneDeep( this.previousOcrCommandData ),
                     image,
@@ -220,7 +222,7 @@ export class AppController {
         ) {
             systemPreferences.isTrustedAccessibilityClient(true);
         }
-        console.timeEnd('YomiNinja Startup time');
+        console.timeEnd('App Startup time');
 
         setTimeout( () => ocrRecognitionController.installOcrModels(), 15_000 );
     }
@@ -621,6 +623,9 @@ export class AppController {
     }
 
     handleOcrCommand = async ( input: OcrCommandInput = {} ) => {
+        // A press without an image starts a new trace; the screenshot callback continues the current one.
+        if ( !input.image || !ocrTiming.active )
+            ocrTiming.begin();
         await this.debouncedOcrCmdHandler( input );
     }
 
@@ -633,6 +638,7 @@ export class AppController {
     ) => {
 
         // console.log('AppController.handleOcrCommand');
+        ocrTiming.mark('debounce');
 
         let {
             image,
@@ -656,8 +662,9 @@ export class AppController {
             if ( screenshotSuccess ) return;
         }
         ipcMain.send( this.overlayWindow, 'ocr:processing_started' );
-        
+
         await this.handleCaptureSourceSelection();
+        ocrTiming.mark('source');
 
         preventNegativeCoordinates = preventNegativeCoordinates !== undefined ?
             preventNegativeCoordinates :
@@ -697,6 +704,7 @@ export class AppController {
         });
         this.showOverlayWindow({ showInactive: true, displayResults: false }); // This can cause problems with JPDBReader extension // Warning: Unknown display value, please report this!
         ipcMain.send( this.overlayWindow, 'user_command:toggle_results', false );
+        ocrTiming.mark('bounds');
 
         if ( this.isEditingOcrTemplate ) {
             ipcMain.send(
@@ -728,6 +736,7 @@ export class AppController {
         ipcMain.send( this.overlayWindow, 'ocr:processing_complete' );
         this.showOverlayWindow();
         ipcMain.send( this.overlayWindow, 'user_command:toggle_results', true );
+        ocrTiming.end( engineName );
     };
 
     async _handleVideoStream( image: Buffer ) {
