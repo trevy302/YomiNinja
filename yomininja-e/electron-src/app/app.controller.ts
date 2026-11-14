@@ -204,7 +204,8 @@ export class AppController {
         screenCapturerController.onScreenshot(
             async ( image: Buffer ) => {
                 ocrTiming.mark('grab');
-                return await this.handleOcrCommand({
+                // The hotkey press was already debounced; don't wait another 50 ms for the captured frame.
+                return await this._handleOcrCommand({
                     ...cloneDeep( this.previousOcrCommandData ),
                     image,
                     preventNegativeCoordinates: false,
