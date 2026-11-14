@@ -2,6 +2,14 @@ import { useContext, useEffect, useState } from "react";
 import { CaptureSourceContext, CaptureSourceProvider } from '../context/capture_source.provider';
 import { ipcRenderer } from "../utils/ipc-renderer";
 
+// WebCodecs VideoFrame (Chromium 94+, so available in Electron), missing from TypeScript 4.9's DOM types.
+// Only the members used here.
+interface VideoFrame {
+    readonly displayWidth: number;
+    readonly displayHeight: number;
+    close(): void;
+}
+
 
 class Capturer {
     
@@ -17,6 +25,67 @@ class Capturer {
 
     createdAt: number = 0;
     frameGrabbedAt: number = Date.now();
+
+    // Latest frame delivered by the capture stream. Windows only delivers a new frame when the screen changes,
+    // so if none arrives shortly after a request, this one still shows the current screen.
+    latestFrame: VideoFrame | undefined;
+    latestFrameAt: number = 0;
+    private frameReader: ReadableStreamDefaultReader< VideoFrame > | undefined;
+
+    // How long to wait for a fresh frame before using the latest one. Covers the 10 fps cap and lets the
+    // overlay hide its previous results first.
+    static readonly MAX_FRAME_WAIT_MS = 150;
+
+    private trackLatestFrame() {
+
+        this.stopTrackingFrames();
+
+        // @ts-ignore: not in this TypeScript version's DOM types (Chromium 94+)
+        const Processor = window.MediaStreamTrackProcessor;
+        if ( !Processor || !this.track ) return;
+
+        const reader: ReadableStreamDefaultReader< VideoFrame > = new Processor({ track: this.track }).readable.getReader();
+        this.frameReader = reader;
+
+        ( async () => {
+            try {
+                for (;;) {
+                    const { value, done } = await reader.read();
+                    if ( done || this.frameReader !== reader ) {
+                        value?.close();
+                        break;
+                    }
+                    this.latestFrame?.close(); // keep only one frame alive
+                    this.latestFrame = value;
+                    this.latestFrameAt = performance.now();
+                }
+            } catch ( error ) {
+                console.log( error );
+            }
+        })();
+    }
+
+    private stopTrackingFrames() {
+        this.frameReader?.cancel().catch( () => {} );
+        this.frameReader = undefined;
+        this.latestFrame?.close();
+        this.latestFrame = undefined;
+        this.latestFrameAt = 0;
+    }
+
+    // Resolves with a frame that is at most MAX_FRAME_WAIT_MS older than the request (or the latest frame if
+    // the screen didn't change). Undefined if the stream hasn't delivered any frame yet.
+    private async currentFrame(): Promise< VideoFrame | undefined > {
+        const requestedAt = performance.now();
+        while (
+            this.latestFrame &&
+            this.latestFrameAt < requestedAt &&
+            performance.now() - requestedAt < Capturer.MAX_FRAME_WAIT_MS
+        ) {
+            await this.sleep( 5 );
+        }
+        return this.latestFrame;
+    }
 
     init = async ( input: {
         mediaSourceId: string,
@@ -78,7 +147,8 @@ class Capturer {
 
         this.track = this.mediaStream.getVideoTracks()[0];
         this.imageCapture = new ImageCapture( this.track );
-        
+        this.trackLatestFrame();
+
         if ( canvasSize ) {
             this.canvas = new OffscreenCanvas(
                 canvasSize.width,
@@ -101,24 +171,35 @@ class Capturer {
     
     grabFrame = async ( format: 'jpeg' | 'png' = 'jpeg' ): Promise< Buffer | undefined > => {
 
-        if (
-            this.grabbingFrame ||
-            !this.imageCapture ||
-            !this.canvas
-        ) return;
-        
-        try {
+        // A grab already in progress will deliver its frame; the stream isn't initialized yet otherwise
+        if ( this.grabbingFrame || !this.imageCapture )
+            return;
 
-            if ( await this.autoResetCapturer() )
-                return;
-            
+        try {
             this.grabbingFrame = true;
 
-            // console.time('grabFrame')
-            const frame = await this.imageCapture.grabFrame();
+            // Resets a stale stream (and keeps going with the new one instead of dropping this request)
+            await this.autoResetCapturer();
+
+            const t0 = performance.now();
+
+            // Use the latest streamed frame (fast); fall back to waiting for one if none has arrived yet.
+            // Nothing is awaited between getting the tracked frame and drawing it, so it can't be closed meanwhile.
+            const tracked = await this.currentFrame();
+            const frame: VideoFrame | ImageBitmap = tracked || await this.imageCapture.grabFrame();
+            const t1 = performance.now();
+
+            const width = tracked ? tracked.displayWidth : ( frame as ImageBitmap ).width;
+            const height = tracked ? tracked.displayHeight : ( frame as ImageBitmap ).height;
+
+            // Size the canvas from the frame itself, so a request doesn't depend on the video element's resize event
+            if ( !this.canvas || this.canvas.width !== width || this.canvas.height !== height )
+                this.canvas = new OffscreenCanvas( width, height );
 
             const context = this.canvas.getContext('2d');
-            context.drawImage( frame, 0, 0, frame.width, frame.height );
+            context.drawImage( frame as unknown as CanvasImageSource, 0, 0, width, height );
+            if ( !tracked ) ( frame as ImageBitmap ).close();
+            const t2 = performance.now();
 
             const blob = await new Promise<Blob>((resolve, reject) => {
                 this.canvas.convertToBlob({ type: `image/${format}`, quality: 1 })
@@ -127,8 +208,10 @@ class Capturer {
                         resolve(blob);
                     });
             });
+            const t3 = performance.now();
 
             const buffer = Buffer.from( await blob.arrayBuffer() );
+            console.log(`[grab-timing] source=${tracked ? 'stream' : 'grabFrame'} wait=${(t1-t0).toFixed(0)} draw=${(t2-t1).toFixed(0)} encode=${(t3-t2).toFixed(0)} copy=${(performance.now()-t3).toFixed(0)} size=${width}x${height} bytes=${buffer.length}`);
 
             this.grabbingFrame = false;
 
