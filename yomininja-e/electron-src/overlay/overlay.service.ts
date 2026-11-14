@@ -22,7 +22,9 @@ export class OverlayService {
     // Websocket to use with text extractors
     initWebSocket() {
 
-        this.webSocketServer = new WebSocketServer({ port: 6677 });
+        // Texthooker pages are hosted on other origins, so origins aren't restricted here;
+        // this socket only broadcasts OCR text. Keep it off the local network, though.
+        this.webSocketServer = new WebSocketServer({ port: 6677, host: '127.0.0.1' });
 
         this.webSocketServer.on( 'connection', ( ws ) => {
 

@@ -24,5 +24,20 @@ ipcMain.handle( 'refresh_window', async ( event: IpcMainInvokeEvent, windowName:
 });
 
 ipcMain.handle( 'open_link', async ( event: IpcMainInvokeEvent, message: string ) => {
-    shell.openExternal(message);        
+
+    // Only open web links. shell.openExternal can also launch local files,
+    // programs and protocol handlers, which must never come from untrusted input.
+    let link: URL;
+    try {
+        link = new URL( String(message) );
+    } catch {
+        return;
+    }
+
+    if ( link.protocol !== 'http:' && link.protocol !== 'https:' ) {
+        console.warn(`open_link: blocked non-web URL "${message}"`);
+        return;
+    }
+
+    shell.openExternal( link.href );
 });

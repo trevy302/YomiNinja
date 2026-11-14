@@ -20,7 +20,7 @@ export async function isPortInUse( port: number, host = '0.0.0.0' ): Promise< bo
     });
 }
 
-export async function isPortAvailable( port: number ): Promise< boolean > {
+export async function isPortAvailable( port: number, host = '127.0.0.1' ): Promise< boolean > {
     return new Promise( (resolve, reject) => {
 
         const server = net.createServer((socket) => {
@@ -33,18 +33,18 @@ export async function isPortAvailable( port: number ): Promise< boolean > {
             resolve(false);
         });
       
-        server.listen( port, () => {
+        server.listen( port, host, () => {
             server.close();
             resolve(true);
         });
     });
 }
 
-export async function getNextPortAvailable( port: number, host = '0.0.0.0' ): Promise< number | undefined > {
+export async function getNextPortAvailable( port: number, host = '127.0.0.1' ): Promise< number | undefined > {
 
     while( port < 65_535 ) {
 
-        const isAvailable = await isPortAvailable( port );
+        const isAvailable = await isPortAvailable( port, host );
 
         if ( isAvailable ) return port;
 

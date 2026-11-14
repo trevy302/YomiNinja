@@ -310,10 +310,11 @@ def serve( port: str = '23456', executor: ProcessPoolExecutor = None ):
     servicer = Service( server, executor )
     service_grpc.add_OCRServiceServicer_to_server( servicer, server )
 
-    server.add_insecure_port("[::]:" + port)
+    # Only YomiNinja on this machine talks to this service
+    server.add_insecure_port("127.0.0.1:" + port)
     server.start()
 
-    server_data = { "server_address": f"0.0.0.0:{port}" }
+    server_data = { "server_address": f"127.0.0.1:{port}" }
 
     server_info = f'[INFO-JSON]:{server_data}'
     print( server_info.replace("'", '"') )
