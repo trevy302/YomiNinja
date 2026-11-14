@@ -24,6 +24,8 @@ import { getNextPortAvailable } from "../../../util/port_check";
 import { TextLine__Output } from "../../../../../../grpc/rpc/ocr_service/TextLine";
 import { isLinux } from "../../../../../util/environment.util";
 
+type RunningEngineConfig = Pick< PpOcrEngineSettings, 'inference_runtime' | 'cpu_threads' | 'max_image_width' >;
+
 export class PaddleOcrService {
     
     public status: OcrAdapterStatus = OcrAdapterStatus.Disabled;
@@ -33,6 +35,8 @@ export class PaddleOcrService {
     private binRoot: string;
 
     private autoRestartCount = 0;
+
+    private runningEngineConfig: RunningEngineConfig | undefined;
 
     constructor() {
         
@@ -213,6 +217,7 @@ export class PaddleOcrService {
     async startProcess( onInitialized?: ( input?: any ) => void ) {
 
         this.handleSettingsPreset();
+        this.runningEngineConfig = this.readEnginePreset();
 
         const platform = os.platform();
 
@@ -363,6 +368,18 @@ export class PaddleOcrService {
             max_image_width: this.maxImageWidthValidation( settingsUpdate.max_image_width )
         };
 
+        // The engine only reads these at startup, from its own preset file, which can differ from the saved
+        // settings (a reinstall resets that file to the bundled defaults). Restart if the running engine differs.
+        const running = this.runningEngineConfig;
+        if (
+            running && (
+                running.inference_runtime !== settingsUpdate.inference_runtime ||
+                running.cpu_threads !== settingsUpdate.cpu_threads ||
+                running.max_image_width !== settingsUpdate.max_image_width
+            )
+        )
+            restart = true;
+
         const requestInput: UpdatePpOcrSettingsRequest = {
             ...settingsUpdate,
         };
@@ -444,6 +461,22 @@ export class PaddleOcrService {
                 baseFilePath,
                 dest
             );
+        }
+    }
+
+    // Settings the engine process is about to start with (it reads them from its preset file)
+    private readEnginePreset(): RunningEngineConfig | undefined {
+        try {
+            const preset = JSON.parse(
+                fs.readFileSync( join( this.settingsPresetsRoot, 'default.json' ), 'utf-8' )
+            );
+            return {
+                inference_runtime: preset.inference_backend,
+                cpu_threads: preset.cpu_threads,
+                max_image_width: preset.max_image_width,
+            };
+        } catch ( error ) {
+            console.error( error );
         }
     }
 

@@ -113,7 +113,8 @@ export class UpdateSettingsPresetUseCase< TOcrSettings extends OcrEngineSettings
 
             // await new Promise( resolve => setTimeout( resolve, 500 ) );
 
-            for ( const adapterName of ocrAdaptersToBeRestarted ) {
+            // An adapter can be listed twice (input engines, then all adapters); restart it once
+            for ( const adapterName of new Set( ocrAdaptersToBeRestarted ) ) {
 
                 const ocrAdapter = this.getOcrAdapter( adapterName );
 
