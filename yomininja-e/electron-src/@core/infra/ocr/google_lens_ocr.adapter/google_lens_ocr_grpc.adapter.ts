@@ -424,42 +424,37 @@ export class GoogleLensOcrGrpcAdapter implements OcrAdapter< GoogleLensOcrEngine
         let newWidth = width;
         let newHeight = height;
 
-        if ( width > height && width > maxDimension ) {
-            newWidth = maxDimension;
-            newHeight = Math.floor( height * (newWidth / width) );
-        }
-        else if ( height > width && height > maxDimension ) {
-            newHeight = maxDimension;
-            newHeight = Math.floor( width * (newHeight / height) );
+        // Fit the longest side into maxDimension, keeping the aspect ratio
+        const longestSide = Math.max( width, height );
+        if ( longestSide > maxDimension ) {
+            const scale = maxDimension / longestSide;
+            newWidth = Math.floor( width * scale );
+            newHeight = Math.floor( height * scale );
         }
 
-        const area = width * height;
-        
-        if (
-            newWidth == width &&
-            newHeight == height &&
-            area < maxArea
-        )
-            return { image, size: { width, height } };
-        
-
+        // Then shrink further if the area is still above maxArea
         const newArea = newWidth * newHeight;
-        
         if ( newArea > maxArea ) {
-            newWidth = Math.floor(
-                Math.sqrt( ( maxArea * newWidth ) / newHeight )
-            );
-            newHeight = Math.floor(
-                Math.sqrt( ( maxArea * newHeight) / newWidth )
-            );
+            const scale = Math.sqrt( maxArea / newArea );
+            newWidth = Math.floor( newWidth * scale );
+            newHeight = Math.floor( newHeight * scale );
         }
+
+        const needsResize = newWidth !== width || newHeight !== height;
+
+        // Already small enough and already JPEG: send as is
+        if ( !needsResize && metadata.format === 'jpeg' )
+            return { image, size: { width, height } };
 
         console.log({ newWidth, newHeight });
-        
-        const newImage = await sharpImage.resize({
-            width: newWidth,
-            height: newHeight
-        }).toBuffer();
+
+        // Upload JPEG: PNG input (clipboard/fallback capture) is several times larger
+        const newImage = await ( needsResize ?
+                sharpImage.resize({ width: newWidth, height: newHeight }) :
+                sharpImage
+            )
+            .jpeg({ quality: 90 })
+            .toBuffer();
 
         return {
             image: newImage,
