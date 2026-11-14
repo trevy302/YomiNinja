@@ -1,7 +1,7 @@
 import { OcrAdapter, OcrAdapterStatus, OcrEngineSettingsOptions, OcrRecognitionInput, TextRecognitionModel, UpdateOcrAdapterSettingsOutput } from "../../../application/adapters/ocr.adapter";
 import { RecognizeBytesRequest } from "../../../../../grpc/rpc/ocr_service/RecognizeBytesRequest";
 
-import { PpOcrEngineSettings, getPpOcrDefaultSettings, ppOcrAdapterName } from "./ppocr_settings";
+import { PpOcrEngineSettings, getPpOcrDefaultSettings, getPpOcrLanguageCode, ppOcrAdapterName } from "./ppocr_settings";
 import { UpdatePpOcrSettingsRequest } from "../../../../../grpc/rpc/ocr_service/UpdatePpOcrSettingsRequest";
 import { OcrEngineSettingsU } from "../../types/entity_instance.types";
 import { OcrResultScalable } from "../../../domain/ocr_result_scalable/ocr_result_scalable";
@@ -37,11 +37,8 @@ export class PpOcrAdapter implements OcrAdapter< PpOcrEngineSettings > {
 
         const { language } = input
 
-        let language_code = language.bcp47_tag || language.two_letter_code;
+        const language_code = getPpOcrLanguageCode( language );
 
-        if ( language.two_letter_code === 'en' )
-            language_code = 'en';
-        
         const requestInput: RecognizeBytesRequest = {
             id: this.idCounter.toString()+this.name,
             image_bytes: input.imageBuffer,

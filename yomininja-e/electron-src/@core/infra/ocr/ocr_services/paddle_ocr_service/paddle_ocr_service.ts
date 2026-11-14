@@ -14,7 +14,9 @@ import os from 'os';
 import { UpdatePpOcrSettingsRequest } from "../../../../../../grpc/rpc/ocr_service/UpdatePpOcrSettingsRequest";
 import { OcrEngineSettingsU } from "../../../types/entity_instance.types";
 import fs from 'fs';
-import { PpOcrEngineSettings } from "../../ppocr.adapter/ppocr_settings";
+import { PpOcrEngineSettings, getPpOcrLanguageCode } from "../../ppocr.adapter/ppocr_settings";
+import sharp from "sharp";
+import { performance } from "perf_hooks";
 import { UpdateSettingsResponse__Output } from "../../../../../../grpc/rpc/ocr_service/UpdateSettingsResponse";
 import { DetectRequest } from "../../../../../../grpc/rpc/ocr_service/DetectRequest";
 import { DetectResponse__Output } from "../../../../../../grpc/rpc/ocr_service/DetectResponse";
@@ -54,6 +56,51 @@ export class PaddleOcrService {
         );
 
         this.status = OcrAdapterStatus.Enabled;
+
+        this.warmUp();
+    }
+
+    // The engine initializes its models on the first request (~0.35 s more with OpenVINO, more with ONNX).
+    // Send a tiny blank image right after startup so the user's first scan doesn't pay for it.
+    private async warmUp() {
+
+        const client = this.ocrServiceClient;
+        const language_code = await this.waitForProfileLanguageCode();
+
+        // Skip if the engine was restarted meanwhile (the new connection does its own warm-up)
+        if ( !language_code || !client || client !== this.ocrServiceClient )
+            return;
+
+        const image_bytes = await sharp({
+            create: { width: 64, height: 64, channels: 3, background: '#ffffff' }
+        }).jpeg().toBuffer();
+
+        const startedAt = performance.now();
+
+        client.RecognizeBytes( { id: 'warm-up', language_code, image_bytes }, ( error ) => {
+            if ( error )
+                console.log( 'PaddleOCR warm-up failed: ' + error.message );
+            else
+                console.log( `PaddleOCR warm-up done (${ ( performance.now() - startedAt ).toFixed(0) }ms)` );
+        });
+    }
+
+    // The engine starts before the user profile is loaded, so wait for it (up to 30 s).
+    private async waitForProfileLanguageCode(): Promise< string | undefined > {
+
+        for ( let attempt = 0; attempt < 60; attempt++ ) {
+            try {
+                // Required lazily: app_initialization imports this service.
+                const { getActiveProfile } = require('../../../app_initialization') as typeof import('../../../app_initialization');
+                const language = getActiveProfile()?.active_ocr_language;
+                if ( language )
+                    return getPpOcrLanguageCode( language );
+            } catch ( error ) {
+                console.error( error );
+                return;
+            }
+            await new Promise( resolve => setTimeout( resolve, 500 ) );
+        }
     }
 
     async recognize( input: RecognizeBytesRequest ): Promise< OcrResult | null > {
