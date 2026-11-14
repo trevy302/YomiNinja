@@ -365,7 +365,7 @@ export class PyOcrService {
         //     pyScript
         // });
 
-        this.serviceProcess = spawn(
+        const serviceProcess = spawn(
             executablePath,
             [ '-u', pyScript, port.toString() ],
             {
@@ -376,16 +376,21 @@ export class PyOcrService {
                 env: {
                     CUSTOM_MODULES_PATH: this.CUSTOM_MODULES_PATH,
                     MODELS_PATH: this.MODELS_PATH,
-                } 
+                }
             }
         );
+        this.serviceProcess = serviceProcess;
+
+        // On restart, the previous process exits after its replacement has been spawned.
+        // Its events must not connect to, or restart, the new one.
+        const isCurrentProcess = () => serviceProcess === this.serviceProcess;
 
         // Handle stdout data
-        this.serviceProcess.stdout.on('data', async ( data: string ) => {
+        serviceProcess.stdout.on('data', async ( data: string ) => {
 
             console.log(`stdout: ${data.toString()}`);
 
-            if ( data.includes('[INFO-JSON]:') ) {
+            if ( data.includes('[INFO-JSON]:') && isCurrentProcess() ) {
 
                 const jsonData = JSON.parse( data.toString().split('[INFO-JSON]:')[1] );
 
@@ -401,18 +406,18 @@ export class PyOcrService {
             
         });
 
-        this.serviceProcess.stderr.on('data', (data) => {
+        serviceProcess.stderr.on('data', (data) => {
             console.error(`stderr: ${data}`);
-            if ( data.includes('Terminating') ) {
+            if ( data.includes('Terminating') && isCurrentProcess() ) {
                 this.restart( () => {} );
             }
         });
 
         // Handle process exit
-        this.serviceProcess.on('close', (code) => {
+        serviceProcess.on('close', (code) => {
             console.log(`${executableName} process exited with code ${code}`);
 
-            if ( this.status === OcrAdapterStatus.Disabled ) {
+            if ( !isCurrentProcess() || this.status === OcrAdapterStatus.Disabled ) {
                 return;
             }
 

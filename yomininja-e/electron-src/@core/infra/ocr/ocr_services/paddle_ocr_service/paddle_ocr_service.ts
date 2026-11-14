@@ -225,13 +225,20 @@ export class PaddleOcrService {
         let port: string | number| undefined = (await getNextPortAvailable( 52_000 )) || 22345;
 
         this.status = OcrAdapterStatus.Starting;
-        this.serviceProcess = spawn(
+        const serviceProcess = spawn(
             executable,
             [ this.settingsPresetsRoot, 'default', port.toString() ],
             { cwd: this.binRoot, detached: isLinux }
         );
-        this.serviceProcess.on('error', error => {
+        this.serviceProcess = serviceProcess;
+
+        // On restart, the previous process exits after its replacement has been spawned. Its events must not
+        // act on the new process (killing it, connecting to it, or scheduling yet another restart).
+        const isCurrentProcess = () => serviceProcess === this.serviceProcess;
+
+        serviceProcess.on('error', error => {
             console.error(error);
+            if ( !isCurrentProcess() ) return;
             this.killServiceProcess();
             if ( this.status === OcrAdapterStatus.Starting ) {
                 this.status = OcrAdapterStatus.Disabled
@@ -242,9 +249,9 @@ export class PaddleOcrService {
         
 
         // Handle stdout and stderr data
-        this.serviceProcess.stdout.on('data', ( data: string ) => {
+        serviceProcess.stdout.on('data', ( data: string ) => {
 
-            if ( data.includes('[INFO-JSON]:') ) {
+            if ( data.includes('[INFO-JSON]:') && isCurrentProcess() ) {
 
                 const jsonData = JSON.parse( data.toString().split('[INFO-JSON]:')[1] );
 
@@ -258,13 +265,16 @@ export class PaddleOcrService {
             console.log(`stdout: ${data}`);        
         });
 
-        this.serviceProcess.stderr.on('data', (data) => {
+        serviceProcess.stderr.on('data', (data) => {
             console.error(`stderr: ${data}`);
         });
 
         // Handle process exit
-        this.serviceProcess.on('close', (code) => {
+        serviceProcess.on('close', (code) => {
             console.log(`ppocr_infer_service_grpc process exited with code ${code}`);
+
+            if ( !isCurrentProcess() ) return; // A replaced process exiting after a restart
+
             this.killServiceProcess();
 
             if ( 
