@@ -365,7 +365,7 @@ export class PyOcrService {
         //     pyScript
         // });
 
-        const serviceProcess = spawn(
+        const serviceProcess: ChildProcessWithoutNullStreams = spawn(
             executablePath,
             [ '-u', pyScript, port.toString() ],
             {

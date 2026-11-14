@@ -225,7 +225,7 @@ export class PaddleOcrService {
         let port: string | number| undefined = (await getNextPortAvailable( 52_000 )) || 22345;
 
         this.status = OcrAdapterStatus.Starting;
-        const serviceProcess = spawn(
+        const serviceProcess: ChildProcessWithoutNullStreams = spawn(
             executable,
             [ this.settingsPresetsRoot, 'default', port.toString() ],
             { cwd: this.binRoot, detached: isLinux }
