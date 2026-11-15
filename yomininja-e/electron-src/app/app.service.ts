@@ -7,6 +7,14 @@ import { screen } from 'electron';
 import sharp from "sharp";
 const isMacOs = process.platform === 'darwin';
 import { isLinux, isMacOS, isWaylandDisplay } from "../util/environment.util";
+import { windowManager as nodeWindowManager } from "node-window-manager";
+import { FrameCrop, getWindowCrop } from "../screen_capturer/frame_crop";
+
+// The window an OCR command reads in "Active window" mode, and where it is in the captured screen frame
+export type ActiveWindowTarget = {
+    window: ExternalWindow;
+    crop: FrameCrop;
+};
 
 
 export const entireScreenAutoCaptureSource: CaptureSource = {
@@ -20,6 +28,10 @@ export class AppService {
 
     getActiveSettingsPresetUseCase: GetActiveSettingsPresetUseCase;
     entireScreenCaptureSource: CaptureSource;
+    activeWindowCaptureSource: CaptureSource | undefined;
+
+    // Last foreground window that wasn't YomiNinja's
+    private lastExternalWindowId: number | undefined;
 
 
     constructor( input: {
@@ -37,6 +49,70 @@ export class AppService {
         this.entireScreenCaptureSource = sources.find(
             source => source.name.includes( 'Entire screen' )
         ) || entireScreenAutoCaptureSource;
+
+        // Streams the (single) screen and crops each OCR to the foreground window
+        if (
+            process.platform === 'win32' &&
+            this.entireScreenCaptureSource.id &&
+            screen.getAllDisplays().length === 1
+        ) {
+            this.activeWindowCaptureSource = {
+                ...this.entireScreenCaptureSource,
+                name: 'Active window',
+                activeWindow: true,
+            };
+        }
+    }
+
+    // The foreground window and where it is in a capture of its display. When YomiNinja itself is in the
+    // foreground (e.g. the overlay took focus after the previous scan), the last other window is used instead.
+    // Undefined when the whole screen should be read: no usable window, or it's (nearly) fullscreen.
+    async getActiveWindowTarget(): Promise< ActiveWindowTarget | undefined > {
+
+        try {
+            const activeWindow = nodeWindowManager.getActiveWindow();
+            if ( activeWindow?.id && activeWindow.processId !== process.pid )
+                this.lastExternalWindowId = activeWindow.id;
+        } catch ( error ) {
+            console.error( error );
+        }
+
+        const windowId = this.lastExternalWindowId;
+        if ( !windowId ) return;
+
+        let windowProps: Awaited< ReturnType< typeof windowManager.getWindow > >;
+        try {
+            // Physical-pixel bounds without the invisible resize borders
+            windowProps = await windowManager.getWindow( windowId );
+        } catch {
+            return; // Closed or hidden
+        }
+        if ( !windowProps?.size ) return;
+
+        const windowRect = {
+            ...windowProps.position,
+            ...windowProps.size,
+        };
+
+        const windowCenterDip = screen.screenToDipPoint({
+            x: windowRect.x + windowRect.width / 2,
+            y: windowRect.y + windowRect.height / 2,
+        });
+        const display = screen.getDisplayNearestPoint( windowCenterDip );
+        const displayRect = screen.dipToScreenRect( null, display.bounds );
+
+        const result = getWindowCrop( windowRect, displayRect );
+        if ( !result ) return;
+
+        return {
+            window: {
+                id: windowId,
+                name: windowProps.title,
+                position: { x: result.window.x, y: result.window.y },
+                size: { width: result.window.width, height: result.window.height },
+            },
+            crop: result.crop,
+        };
     }
 
     
@@ -103,6 +179,9 @@ export class AppService {
         // If there are more than 1 display, the auto capture source option must be available
         if ( displaysSources.length > 1 )
             results.unshift( entireScreenAutoCaptureSource );
+
+        if ( this.activeWindowCaptureSource && types.includes('screen') )
+            results.unshift( this.activeWindowCaptureSource );
 
         // console.timeEnd('getAllCaptureSources time');
         return results;

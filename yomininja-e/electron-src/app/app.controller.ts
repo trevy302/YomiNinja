@@ -2,7 +2,7 @@ import { BrowserWindow, IpcMainInvokeEvent, Tray, nativeImage, app, clipboard, g
 import { UiohookKey, uIOhook } from "uiohook-napi";
 import { CaptureSource, ExternalWindow } from "../ocr_recognition/common/types";
 import { TaskbarProperties } from "../../gyp_modules/window_management/window_manager";
-import { AppService, entireScreenAutoCaptureSource } from "./app.service";
+import { ActiveWindowTarget, AppService, entireScreenAutoCaptureSource } from "./app.service";
 import sharp from "sharp";
 import os from 'os';
 import { screen } from 'electron';
@@ -55,6 +55,12 @@ export class AppController {
     private userSelectedWindowId: number | undefined;
 
     private activeCaptureSource: CaptureSource;
+
+    // "Active window" mode: the window the current OCR command reads (undefined: the whole screen)
+    private activeWindowTarget: ActiveWindowTarget | undefined;
+    private get isActiveWindowMode(): boolean {
+        return Boolean( this.activeCaptureSource?.activeWindow );
+    }
 
     private slowInitNotificationTimeout: NodeJS.Timeout;
     private quitTimeout: NodeJS.Timeout;
@@ -185,7 +191,11 @@ export class AppController {
         this.taskbar = this.appService.getTaskbar();
         
         await this.appService.init();
-        this.activeCaptureSource = this.appService.entireScreenCaptureSource;
+        this.activeCaptureSource = cloneDeep(
+            this.appService.activeWindowCaptureSource ||
+            this.appService.entireScreenCaptureSource
+        );
+        overlayController.activeCaptureSource = this.activeCaptureSource;
         
         screenCapturerController.init();
         screenCapturerController.setCaptureSource( this.activeCaptureSource );
@@ -276,6 +286,13 @@ export class AppController {
                     this.userSelectedWindowId = Number( message.id.split(':')[1] );
                 else
                     this.userSelectedWindowId = undefined;
+
+                // The window is picked on each OCR command
+                if ( message?.activeWindow ) {
+                    this.userSelectedDisplayId = undefined;
+                    this.userSelectedWindowId = undefined;
+                }
+                this.activeWindowTarget = undefined;
 
                 this.activeCaptureSource = message;
 
@@ -568,6 +585,11 @@ export class AppController {
 
     async handleDisplaySource() {
 
+        if ( this.isActiveWindowMode && this.activeWindowTarget ) {
+            this.captureSourceDisplay = undefined;
+            return;
+        }
+
         if ( this.userSelectedDisplayId !== undefined ) {
             this.captureSourceDisplay = this.appService.getDisplay( this.userSelectedDisplayId );
             return;
@@ -583,6 +605,12 @@ export class AppController {
     }
 
     async handleWindowSource() {
+
+        if ( this.isActiveWindowMode ) {
+            this.captureSourceWindow = this.activeWindowTarget?.window;
+            this.activeCaptureSource.window = this.captureSourceWindow;
+            return;
+        }
         
         if ( this.userSelectedWindowId ) {
             this.captureSourceWindow = await this.appService.getExternalWindow( this?.userSelectedWindowId );
@@ -657,12 +685,27 @@ export class AppController {
         if ( overlayController.isOverlayMovableResizable )
             return;
 
+        // Images that didn't come from this command's own screenshot (e.g. PrintScreen) show the whole screen
+        if ( image && autoCrop !== false )
+            this.activeWindowTarget = undefined;
+
         ipcMain.send( this.overlayWindow, 'user_command:toggle_results', false );
-        
+
         if ( !input.image ) {
             this.previousOcrCommandData = input;
+
+            if ( this.isActiveWindowMode ) {
+                this.activeWindowTarget = await this.appService.getActiveWindowTarget()
+                    .catch( error => {
+                        console.error( error );
+                        return undefined;
+                    });
+                ocrTiming.mark('window');
+            }
+
             const screenshotSuccess = screenCapturerController.screenshot({
-                captureSource: this.activeCaptureSource
+                captureSource: this.activeCaptureSource,
+                crop: this.isActiveWindowMode ? this.activeWindowTarget?.crop : undefined
             });
 
             if ( screenshotSuccess ) return;

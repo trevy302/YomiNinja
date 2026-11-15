@@ -16,6 +16,13 @@
 >   - Screenshots no longer wait for the screen to change.
 >   - Manga OCR runs ~14× faster on the CPU.
 >   - Manga OCR and MeikiOCR can use an NVIDIA GPU.
+>   - The default capture source is **Active window**: each scan only reads the window in the foreground (the whole
+>     screen if it's fullscreen), so a windowed game sends fewer pixels to the OCR engine and other apps don't add
+>     stray results.
+> - **Cleaner overlay**: no red frame or outlines, and the recognized text is invisible by default, so you only see the
+>   game's own text. Yomitan lookups and copying work the same, and hovering a line shows a faint outline. To see the
+>   recognized text, set the text and background colors in *Settings → Visuals*. Settings saved with the old red/black
+>   defaults are switched to the new look; customized colors are kept.
 > - **Fixes**:
 >   - OCR engines no longer die when a setting change restarts them.
 >   - PaddleOCR settings are applied right after a reinstall.

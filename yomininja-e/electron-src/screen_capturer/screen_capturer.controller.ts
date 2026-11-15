@@ -4,6 +4,7 @@ import { CaptureSource } from "../app/types";
 import { ipcMain } from "../common/ipc_main";
 import isDev from "electron-is-dev";
 import { isMacOS } from "../util/environment.util";
+import { FrameCrop } from "./frame_crop";
 
 export class ScreenCapturerController {
 
@@ -26,9 +27,10 @@ export class ScreenCapturerController {
         });
     }
 
-    screenshot( input: { captureSource: CaptureSource } ): boolean {
+    // `crop` limits the screenshot to a region of the streamed frame
+    screenshot( input: { captureSource: CaptureSource, crop?: FrameCrop } ): boolean {
         
-        const { captureSource } = input ; 
+        const { captureSource, crop } = input ; 
         
         if ( captureSource?.name?.includes('Entire screen') ) {
             const displays = screen.getAllDisplays();
@@ -37,7 +39,7 @@ export class ScreenCapturerController {
         }
     
         console.time("Screenshot time");
-        screenCapturerService.grabFrame();
+        screenCapturerService.grabFrame( crop );
         return true;
     }
 

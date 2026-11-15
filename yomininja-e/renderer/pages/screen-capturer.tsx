@@ -1,6 +1,8 @@
 import { useContext, useEffect, useState } from "react";
 import { CaptureSourceContext, CaptureSourceProvider } from '../context/capture_source.provider';
 import { ipcRenderer } from "../utils/ipc-renderer";
+import type { FrameCrop } from "../../electron-src/screen_capturer/frame_crop";
+import { cropToPixels } from "../utils/frame_crop";
 
 // WebCodecs VideoFrame (Chromium 94+, so available in Electron), missing from TypeScript 4.9's DOM types.
 // Only the members used here.
@@ -169,7 +171,8 @@ class Capturer {
         this.canvas = new OffscreenCanvas( width, height );
     }
     
-    grabFrame = async ( format: 'jpeg' | 'png' = 'jpeg' ): Promise< Buffer | undefined > => {
+    // `crop` limits the image to a region of the frame (e.g. the active window), so less has to be encoded and OCR'd
+    grabFrame = async ( format: 'jpeg' | 'png' = 'jpeg', crop?: FrameCrop ): Promise< Buffer | undefined > => {
 
         // A grab already in progress will deliver its frame; the stream isn't initialized yet otherwise
         if ( this.grabbingFrame || !this.imageCapture )
@@ -189,15 +192,23 @@ class Capturer {
             const frame: VideoFrame | ImageBitmap = tracked || await this.imageCapture.grabFrame();
             const t1 = performance.now();
 
-            const width = tracked ? tracked.displayWidth : ( frame as ImageBitmap ).width;
-            const height = tracked ? tracked.displayHeight : ( frame as ImageBitmap ).height;
+            const frameWidth = tracked ? tracked.displayWidth : ( frame as ImageBitmap ).width;
+            const frameHeight = tracked ? tracked.displayHeight : ( frame as ImageBitmap ).height;
+
+            const region = cropToPixels( crop, frameWidth, frameHeight ) ||
+                { x: 0, y: 0, width: frameWidth, height: frameHeight };
+            const { width, height } = region;
 
             // Size the canvas from the frame itself, so a request doesn't depend on the video element's resize event
             if ( !this.canvas || this.canvas.width !== width || this.canvas.height !== height )
                 this.canvas = new OffscreenCanvas( width, height );
 
             const context = this.canvas.getContext('2d');
-            context.drawImage( frame as unknown as CanvasImageSource, 0, 0, width, height );
+            context.drawImage(
+                frame as unknown as CanvasImageSource,
+                region.x, region.y, width, height,
+                0, 0, width, height
+            );
             if ( !tracked ) ( frame as ImageBitmap ).close();
             const t2 = performance.now();
 
@@ -211,7 +222,7 @@ class Capturer {
             const t3 = performance.now();
 
             const buffer = Buffer.from( await blob.arrayBuffer() );
-            console.log(`[grab-timing] source=${tracked ? 'stream' : 'grabFrame'} wait=${(t1-t0).toFixed(0)} draw=${(t2-t1).toFixed(0)} encode=${(t3-t2).toFixed(0)} copy=${(performance.now()-t3).toFixed(0)} size=${width}x${height} bytes=${buffer.length}`);
+            console.log(`[grab-timing] source=${tracked ? 'stream' : 'grabFrame'} wait=${(t1-t0).toFixed(0)} draw=${(t2-t1).toFixed(0)} encode=${(t3-t2).toFixed(0)} copy=${(performance.now()-t3).toFixed(0)} size=${width}x${height}${ width !== frameWidth || height !== frameHeight ? ` crop=${region.x},${region.y} of ${frameWidth}x${frameHeight}` : '' } bytes=${buffer.length}`);
 
             this.grabbingFrame = false;
 
@@ -352,10 +363,10 @@ function ScreenCapturerElement() {
                     capturer.setIntervalBetweenFrames( interval );
                 });
 
-                ipcRenderer.on( 'screen_capturer:grab_frame', async () => {
+                ipcRenderer.on( 'screen_capturer:grab_frame', async ( _, crop?: FrameCrop ) => {
                     
                     try {
-                        const frame = await capturer.grabFrame('jpeg');
+                        const frame = await capturer.grabFrame( 'jpeg', crop );
                         if ( frame ) {
                             sendFrame( frame )
                                 .catch( console.error );

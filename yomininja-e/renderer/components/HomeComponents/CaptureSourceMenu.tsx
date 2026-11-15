@@ -96,7 +96,13 @@ export default function CaptureSourceMenu() {
 
         const { captureSource } = props;
 
-        const sx: SxProps<Theme> = captureSource.id === activeCaptureSource?.id ?
+        // "Active window" streams the same screen as "Entire screen", so the id alone doesn't tell them apart
+        const isActive = (
+            captureSource.id === activeCaptureSource?.id &&
+            Boolean( captureSource.activeWindow ) === Boolean( activeCaptureSource?.activeWindow )
+        );
+
+        const sx: SxProps<Theme> = isActive ?
             {
                 border: 'solid 1px',
                 borderColor: defaultTheme.palette.action.active

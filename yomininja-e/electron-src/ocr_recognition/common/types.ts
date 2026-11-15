@@ -6,6 +6,8 @@ export interface CaptureSource {
     name: string;
     type: 'screen' | 'window';
     window?: ExternalWindow;
+    // Streams the screen, but each OCR only reads the window that's in the foreground
+    activeWindow?: boolean;
 }
 
 export type ExternalWindow = {

@@ -10,6 +10,7 @@ import { cloneDeep } from 'lodash';
 import sharp from "sharp";
 import { windowManager } from "../@core/infra/app_initialization";
 import { isMacOS } from "../util/environment.util";
+import { FrameCrop } from "./frame_crop";
 
 export class ScreenCapturerService {
 
@@ -122,8 +123,8 @@ export class ScreenCapturerService {
         );
     }
 
-    grabFrame = () => {
-        this.screenCapturerWindow?.webContents.send('screen_capturer:grab_frame');
+    grabFrame = ( crop?: FrameCrop ) => {
+        this.screenCapturerWindow?.webContents.send('screen_capturer:grab_frame', crop );
     }
 
     startStream = async () => {
