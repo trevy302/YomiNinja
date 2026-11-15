@@ -1,5 +1,34 @@
 # YomiNinja
 
+> [!IMPORTANT]
+> **This is a fork of [matt-m-o/YomiNinja](https://github.com/matt-m-o/YomiNinja), tuned for reading Japanese games on Windows.**
+> It was tested with *Umamusume: Pretty Derby* (Japanese client) on Windows 11 with an NVIDIA GPU. Other languages,
+> platforms (macOS, Linux) and content types weren't tested and may behave differently from upstream.
+> There are no prebuilt releases: build it yourself with [BUILDING-WINDOWS.md](BUILDING-WINDOWS.md).
+>
+> **What's different from upstream**
+> - **New MeikiOCR engine** (`Alt+M`, can be set as the primary OCR engine): [meikiocr](https://github.com/rtr46/meikiocr),
+>   trained on Japanese video game text. On real Umamusume screenshots it made ~2% character errors versus ~7% for the
+>   bundled PaddleOCR, and reads a 4K frame in ~0.1 s on a GPU. It's Japanese only and is designed for horizontal game
+>   text (vertical text is experimental). For best accuracy, use Google Lens (`Alt+G`) instead; it's cloud-based and ~0.7 s.
+> - **Faster OCR**:
+>   - PaddleOCR now defaults to OpenVINO with 8 threads (~6× faster on the test machine).
+>   - Screenshots no longer wait for the screen to change.
+>   - Manga OCR runs ~14× faster on the CPU.
+>   - Manga OCR and MeikiOCR can use an NVIDIA GPU.
+> - **Fixes**:
+>   - OCR engines no longer die when a setting change restarts them.
+>   - PaddleOCR settings are applied right after a reinstall.
+>   - A scan pressed right after startup is no longer dropped.
+>   - Google Lens now shrinks images without distorting them.
+> - **Security hardening**:
+>   - The local server only accepts connections from this computer.
+>   - Websites can't control the app.
+>   - No path traversal through the local server.
+>   - `open_link` only opens web links.
+>
+> Benchmarks, GPU setup and the full build steps are in [BUILDING-WINDOWS.md](BUILDING-WINDOWS.md).
+
 YomiNinja is an application for extracting text from any type of visual content and is designed with language learners in mind.
 
 ## Demonstration with [10ten](https://github.com/birchill/10ten-ja-reader)
