@@ -9,6 +9,7 @@ import { OcrEngineSettings, SettingsPreset } from "../../../domain/settings_pres
 import { ImageProcessingAdapter } from "../../adapters/image_processing.adapter";
 import { OcrAdapter, OcrAdapterStatus } from "../../adapters/ocr.adapter";
 import { VideoAnalyzerAdapter } from "../../adapters/video_analyzer.adapter";
+import { ocrTiming } from "../../../../util/ocr_timing.util";
 
 
 export type RecognizeImageInput = {    
@@ -41,6 +42,7 @@ export class RecognizeImageUseCase< TOcrSettings extends OcrEngineSettings > {
         const profile: Profile | null = await this.profileRepo.findOne({
             id: input.profileId
         });
+        ocrTiming.mark('profile');
 
         activeOcrLanguage = profile?.active_ocr_language || null;
         activeSettingsPreset = profile?.active_settings_preset || null;        

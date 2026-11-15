@@ -25,6 +25,13 @@ except ImportError:
     print('MangaOcrService ImportError')
     pass
 
+# After Manga OCR, so a CUDA build of torch (if installed) has already loaded the CUDA libraries
+try:
+    from meiki_ocr_service.meiki_ocr_service import MeikiOcrService
+except ImportError as error:
+    MeikiOcrService = None
+    print(f'MeikiOcrService ImportError: {error}')
+
 if IS_MAC_OS:
     from apple_vision_service.apple_vision_service import AppleVisionService
     from apple_vision_service.apple_vision_kit_service import AppleVisionKitService
@@ -52,6 +59,8 @@ class Service( service_grpc.OCRServiceServicer ):
 
     if 'torch' in sys.modules:
         manga_ocr_service = MangaOcrService()
+
+    meiki_ocr_service = MeikiOcrService() if MeikiOcrService else None
 
     def __init__(self, server, executor: ProcessPoolExecutor = None, keep_alive_timeout_seconds = 60 ):
         self.server = server
@@ -111,6 +120,14 @@ class Service( service_grpc.OCRServiceServicer ):
                         request_id= request.id,
                         boxes= request.boxes,
                         detection_only= request.detection_only,
+                    )
+
+                case 'MeikiOCR':
+                    response = self.meiki_ocr_service.recognize(
+                        image= image,
+                        request_id= request.id,
+                        # Raw bytes when available (RecognizeBytes): decoded straight to BGR, much faster than via PIL
+                        image_bytes= getattr( request, 'image_bytes', None ),
                     )
 
                 case 'AppleVision':
@@ -322,6 +339,8 @@ def serve( port: str = '23456', executor: ProcessPoolExecutor = None ):
     # Load the Manga OCR models in the background now instead of on the first request
     if servicer.manga_ocr_service:
         servicer.manga_ocr_service.warm_up()
+    if servicer.meiki_ocr_service:
+        servicer.meiki_ocr_service.warm_up()
 
     # Start the timeout check in a new thread
     # timeout_thread = threading.Thread(target=servicer.timeout_check)

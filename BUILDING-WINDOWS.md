@@ -68,6 +68,9 @@ cd $PY
 ./python.exe -I -m pip install --only-binary :all: setuptools==80.9.0 wheel
 ./python.exe -I -m pip install --only-binary :all: --no-binary jaconv,pyperclip,unidic-lite --no-build-isolation \
     -r ../../../requirements-win-x64-pinned.txt
+# MeikiOCR engine. --no-deps: its declared opencv-python-headless would clash with the bundled opencv-python;
+# everything else it needs (numpy, opencv, huggingface_hub, onnxruntime) is already pinned above.
+./python.exe -I -m pip install --no-deps meikiocr==0.3.5
 ```
 Only `jaconv`, `pyperclip` and `unidic-lite` build from source, because they have no wheels. Build isolation doesn't
 work with the embeddable Python, which is why `--no-build-isolation` is used.
@@ -187,11 +190,33 @@ Reference numbers, 4K screenshot, i9-14900HX + RTX 4090 Laptop GPU:
 | Manga OCR, full recognition | 27.6 s (CPU) | 2.0 s (CPU), 0.57 s (CUDA) |
 | Screenshot (`grab`) | up to ~810 ms | 108–276 ms |
 
-**GPU for Manga OCR.** Install the CUDA build of the same PyTorch version into the Python environment the app uses
-(`%APPDATA%\YomiNinja\bin\py_ocr_service\python`, with YomiNinja closed). Versions are pinned because the in-app
-installer pulls the newest PyTorch, which may not match the bundled `transformers`:
+**OCR engines on real Umamusume screenshots** (6 Steam store screenshots: menus, story log, subtitles over 3D
+scenes; upscaled to 3840x2160 like a 4K screen capture; character error rate vs. a manual transcription;
+RTX 4090 Laptop GPU / i9-14900HX):
+
+| Engine | Errors | Typical | Dense screen (60+ lines) |
+|---|---|---|---|
+| Google Lens (cloud) | 0.1% | ~720 ms | ~780 ms |
+| **MeikiOCR, GPU** (batch 64) | 2.2% | ~30–60 ms | ~80 ms |
+| MeikiOCR, CPU | 2.2% | ~120 ms | ~1 s |
+| PP-OCRv6 medium, GPU (RapidOCR, not integrated) | 2.8% | ~270 ms | ~1 s |
+| PaddleOCR v4 (bundled engine, OpenVINO) | 7.3% | ~420 ms | ~3 s |
+| PP-OCRv5 server, GPU (RapidOCR, not integrated) | 10.3% | ~330 ms | ~1.4 s |
+| Manga OCR, GPU | 43% | ~210 ms | ~1.9 s |
+
+Manga OCR's comic text detector misses most subtitle and narration lines in games.
+
+**GPU for Manga OCR and MeikiOCR.** With YomiNinja closed, install the CUDA builds into the Python environment the
+app uses (`%APPDATA%\YomiNinja\bin\py_ocr_service\python`). Packages installed there take precedence over the
+bundled CPU builds:
 ```
-python.exe -m pip uninstall -y torch torchvision
-python.exe -m pip install torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cu128
+python.exe -I -m pip install --no-deps torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cu128
+python.exe -I -m pip install --no-deps onnxruntime-gpu==1.26.0
 ```
+- Versions are pinned because the in-app installer pulls the newest PyTorch, which may not match the bundled
+  `transformers`.
+- `--no-deps` keeps the bundled dependencies, such as NumPy 1.26.
+- onnxruntime-gpu 1.26.0 is the newest release built for CUDA 12. 1.27+ need CUDA 13 libraries. It uses the CUDA 12 /
+  cuDNN 9 libraries that ship with the CUDA build of PyTorch, so nothing else is needed.
+
 The YomiNinja installer deletes that folder, so do this after (re)installing.

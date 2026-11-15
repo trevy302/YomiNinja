@@ -100,6 +100,11 @@ export default function HotkeyHints() {
             return engineSettings.ocr_adapter_name === 'MangaOcrAdapter'
         });
 
+    const meikiOcrSettings = activeSettingsPreset?.ocr_engines
+        .find( engineSettings => {
+            return engineSettings.ocr_adapter_name === 'MeikiOcrAdapter'
+        });
+
     const appleVisionSettings = activeSettingsPreset?.ocr_engines
         .find( engineSettings => {
             return engineSettings.ocr_adapter_name === 'AppleVisionAdapter'
@@ -148,6 +153,9 @@ export default function HotkeyHints() {
                   createHotkeyHint( 'PaddleOCR', [ppOcrSettings?.hotkey] ) }
                 
                 { createHotkeyHint( 'MangaOCR', [mangaOcrSettings?.hotkey] ) }
+
+                { meikiOcrSettings &&
+                  createHotkeyHint( 'MeikiOCR', [meikiOcrSettings?.hotkey] ) }
 
 
                 { createHotkeyHint( 'Google Lens', [googleLensSettings?.hotkey] ) }

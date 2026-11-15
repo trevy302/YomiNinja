@@ -10,6 +10,7 @@ import { get_GoogleLensOcrAdapter } from "../@core/infra/container_registry/adap
 import { getDefaultSettingsPresetProps } from "../@core/domain/settings_preset/default_settings_preset_props";
 import { getPpOcrDefaultSettings } from "../@core/infra/ocr/ppocr.adapter/ppocr_settings";
 import { getMangaOcrDefaultSettings } from "../@core/infra/ocr/manga_ocr.adapter/manga_ocr_settings";
+import { getMeikiOcrDefaultSettings } from "../@core/infra/ocr/meiki_ocr.adapter/meiki_ocr_settings";
 import { getAppleVisionDefaultSettings } from "../@core/infra/ocr/apple_vision.adapter/apple_vision_settings";
 import { activeProfile, getLaunchConfig } from "../@core/infra/app_initialization";
 import { USER_DATA_DIR } from "../util/directories.util";
@@ -152,6 +153,7 @@ export class SettingsService {
             getGoogleLensDefaultSettings(),
             getCloudVisionDefaultSettings(),
             getMangaOcrDefaultSettings(),
+            getMeikiOcrDefaultSettings(),
             getAppleVisionDefaultSettings(),
         ]
 
