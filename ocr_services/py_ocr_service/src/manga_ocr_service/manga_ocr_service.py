@@ -1,6 +1,5 @@
 import os
 import threading
-import time
 import torch
 from manga_ocr import MangaOcr
 import cv2
@@ -45,7 +44,7 @@ class MangaOcrService:
         self._init_lock = threading.Lock()
         self.is_model_downloaded()
 
-    # Loads the models once. Requests that arrive while a warm-up is loading them wait for it
+    # Loads the models once, on the first request. Requests that arrive while they are loading wait for it
     # instead of loading a second copy (or using a half-initialized service).
     def init_once( self ):
         use_fast_float_mode()
@@ -54,22 +53,6 @@ class MangaOcrService:
         with self._init_lock:
             if not ( self.manga_ocr and self.comic_text_detector ):
                 self.init()
-
-    # Loads the models and runs one tiny inference in the background, so the first Alt+J after startup
-    # doesn't pay for model loading (and, on CUDA, kernel initialization).
-    def warm_up( self ):
-        def run():
-            try:
-                started_at = time.perf_counter()
-                self.init_once()
-                blank = np.full( (64, 64, 3), 255, dtype=np.uint8 )
-                self.comic_text_detector.detect( blank )
-                self.manga_ocr( Image.fromarray( blank ) )
-                print( f'MangaOCR warm-up done ({ (time.perf_counter() - started_at) * 1000:.0f}ms, device: {self.comic_text_detector.device})' )
-            except Exception as error:
-                print( f'MangaOCR warm-up failed: {error}' )
-
-        threading.Thread( target=run, daemon=True ).start()
 
     def init( self ):
 

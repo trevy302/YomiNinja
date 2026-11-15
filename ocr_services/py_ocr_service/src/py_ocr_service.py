@@ -1,5 +1,10 @@
 import sys
 import os
+
+# NumPy's OpenBLAS reserves a buffer per CPU thread when NumPy is first imported (~0.7 GB of committed memory with
+# 32 threads). Nothing here does heavy NumPy linear algebra: PyTorch and ONNX Runtime have their own thread pools.
+os.environ.setdefault('OPENBLAS_NUM_THREADS', '4')
+
 sys.path.insert(0, '.')
 try:
     custom_modules_path = os.environ['CUSTOM_MODULES_PATH']
@@ -336,9 +341,9 @@ def serve( port: str = '23456', executor: ProcessPoolExecutor = None ):
     server_info = f'[INFO-JSON]:{server_data}'
     print( server_info.replace("'", '"') )
 
-    # Load the Manga OCR models in the background now instead of on the first request
-    if servicer.manga_ocr_service:
-        servicer.manga_ocr_service.warm_up()
+    # Load the MeikiOCR models in the background now instead of on the first request.
+    # Manga OCR loads on its first request instead: preloading it costs ~1.5 GB of committed memory, ~0.75 GB of
+    # RAM and ~0.7 GB of GPU memory in every session, including the ones that never use it.
     if servicer.meiki_ocr_service:
         servicer.meiki_ocr_service.warm_up()
 

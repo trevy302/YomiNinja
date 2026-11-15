@@ -1,11 +1,12 @@
 // Benchmarks the Manga OCR engine of the Python OCR service over gRPC, the same way YomiNinja calls it.
 //
 // Starts py_ocr_service.py with the given Python (the app passes CUSTOM_MODULES_PATH and MODELS_PATH the same
-// way), waits for the warm-up, then measures full recognition (detect + recognize every line) on each image.
+// way), then measures full recognition (detect + recognize every line) on each image.
+// The service loads the Manga OCR models on the first request, so the first image's "first" time includes that.
 //
 // Usage (from yomininja-e/):
 //   node tools/bench/bench_mangaocr.js --images <dir> [--python <python.exe>] [--src <py_ocr_service/src>]
-//        [--models <models dir>] [--runs 5] [--port 53900] [--wait-warmup true]
+//        [--models <models dir>] [--runs 5] [--port 53900]
 //
 // Defaults use the build tree (ocr_services/py_ocr_service) and the models YomiNinja downloaded into
 // %APPDATA%/YomiNinja/bin/py_ocr_service/models.
@@ -29,7 +30,6 @@ const MODELS = path.resolve(args.models || path.join(process.env.APPDATA || '', 
 const IMAGES_DIR = path.resolve(args.images || '.');
 const RUNS = Number(args.runs || 5);
 const PORT = Number(args.port || 53900);
-const WAIT_WARMUP = args['wait-warmup'] !== 'false';
 
 const proto = grpc.loadPackageDefinition(
     protoLoader.loadSync(path.join(ROOT, '../ocr_services/protos/ocr_service.proto'), { keepCase: true })
@@ -58,12 +58,6 @@ const median = (a) => [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)];
 
     await waitFor(/\[INFO-JSON\]/);
     console.log(`service up after ${((performance.now() - t0) / 1000).toFixed(1)}s`);
-    if (WAIT_WARMUP) {
-        const m = await waitFor(/MangaOCR warm-up (done \(.*?\)|failed: .*)/);
-        console.log(`warm-up ${m[1]} at ${((performance.now() - t0) / 1000).toFixed(1)}s`);
-    }
-    const device = output.match(/ComicTextDetector device: (\w+)/);
-    console.log(`detector device: ${device ? device[1] : 'unknown (no warm-up line)'}`);
 
     const client = new proto.OCRService(`127.0.0.1:${PORT}`, grpc.credentials.createInsecure(),
         { 'grpc.max_receive_message_length': 64 * 1024 * 1024, 'grpc.max_send_message_length': 64 * 1024 * 1024 });
@@ -83,6 +77,10 @@ const median = (a) => [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)];
         const text = (res.results || []).flatMap((r) => (r.text_lines || []).map((l) => l.content)).join(' / ');
         console.log(`${f}: first ${first.toFixed(0)}ms, median ${median(times).toFixed(0)}ms (${RUNS} runs)\n  text: ${text}`);
     }
+
+    // Printed by the service when the first request loads the models
+    const device = output.match(/ComicTextDetector device: (\w+)/);
+    console.log(`detector device: ${device ? device[1] : 'unknown'}`);
 
     client.close();
     child.kill();

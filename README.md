@@ -16,6 +16,8 @@
 >   - Screenshots no longer wait for the screen to change.
 >   - Manga OCR runs ~14× faster on the CPU.
 >   - Manga OCR and MeikiOCR can use an NVIDIA GPU.
+>   - Manga OCR loads its models on the first `Alt+J` (a few seconds, once per start) instead of at startup, which
+>     keeps memory free when it isn't used.
 >   - The default capture source is **Active window**: each scan only reads the window in the foreground (the whole
 >     screen if it's fullscreen), so a windowed game sends fewer pixels to the OCR engine and other apps don't add
 >     stray results.

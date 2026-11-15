@@ -180,6 +180,9 @@ cd yomininja-e
 node tools/bench/bench_ppocr.js --images <dir> --matrix full --load 8
 # Manga OCR through the Python service (use --python <python.exe> to test another environment, e.g. CUDA PyTorch)
 node tools/bench/bench_mangaocr.js --images <dir>
+# MeikiOCR: memory and scan time on generated 4K screens with 5-64 lines. Run it with the Python the app uses
+# (it needs ~4 GB of free memory and, with the GPU packages, ~1.5 GB of GPU memory)
+%APPDATA%\YomiNinja\bin\py_ocr_service\python\python.exe tools/bench/bench_meikiocr.py [--vertical] [--gpu-batch-size 32]
 ```
 
 Reference numbers, 4K screenshot, i9-14900HX + RTX 4090 Laptop GPU:
@@ -205,6 +208,34 @@ RTX 4090 Laptop GPU / i9-14900HX):
 | Manga OCR, GPU | 43% | ~210 ms | ~1.9 s |
 
 Manga OCR's comic text detector misses most subtitle and narration lines in games.
+
+The MeikiOCR GPU times above were measured with one batch of up to 64 lines. It now runs fixed batches of 16
+(see below), which hasn't been re-timed on an idle machine yet.
+
+**Memory of the Python OCR service** (`python.exe` running `py_ocr_service.py`; MeikiOCR and Manga OCR on the GPU).
+Its committed memory is much larger than its RAM use, because on Windows the GPU memory a process allocates also
+counts as committed memory, and ONNX Runtime keeps the GPU memory of its largest batch for the life of the process.
+
+| | Committed | RAM | GPU memory |
+|---|---|---|---|
+| PyTorch + CUDA + ONNX Runtime + NumPy loaded, no models | ~2.0 GB | ~0.6 GB | 0 |
+| Before: MeikiOCR after screens with up to 64 lines (one batch of 64) | ~8.0 GB | ~1.4 GB | ~5.4 GB |
+| Before: + vertical text, + Manga OCR preloaded at startup | ~10.7 GB | ~2.2 GB | ~7.4 GB |
+| After: MeikiOCR after the same screens (fixed batches of 16) | ~3.5 GB | | ~1.1 GB |
+| After: + Manga OCR, once it has been used | ~5 GB | | ~1.8 GB |
+
+- MeikiOCR recognizes lines in batches of exactly 16, the last one padded (`GPU_BATCH_SIZE` in
+  `meiki_ocr_service.py`). A batch whose size differs from the previous one takes 100–250 ms longer, and in a game
+  the number of lines changes on almost every scan, so a fixed size is also faster there: 8 lines after a different
+  screen took 105–120 ms instead of 220–290 ms. A dense 64-line screen needs 4 passes: 370–390 ms instead of
+  400–440 ms after a different screen, but ~350 ms instead of ~290 ms when rescanning the same screen. A batch size
+  of 32 took ~300 ms for both, for ~0.7 GB more.
+- Manga OCR loads on the first `Alt+J` instead of at startup (~1.5 GB committed, ~0.75 GB RAM, ~0.7 GB GPU).
+- NumPy's OpenBLAS is limited to 4 threads (it reserves a buffer per thread: 0.74 GB with 32 threads, 0.11 GB with 4).
+
+The "after" rows and all timings in this section were measured while other jobs were using the machine, by applying
+the same settings to the MeikiOCR models directly; the recognized text was identical in every configuration.
+Re-measure with `bench_meikiocr.py` on an idle machine.
 
 **GPU for Manga OCR and MeikiOCR.** With YomiNinja closed, install the CUDA builds into the Python environment the
 app uses (`%APPDATA%\YomiNinja\bin\py_ocr_service\python`). Packages installed there take precedence over the
