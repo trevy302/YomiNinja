@@ -23,6 +23,7 @@ import { ipcRenderer } from "../../utils/ipc-renderer";
 import { isElectronBrowser } from '../../utils/environment';
 import { AppInfoContext } from "../../context/app_info.provider";
 import { getDefaultFontFamily } from "../../utils/text_utils";
+import { OVERLAY_ACCENT } from "../../../electron-src/@core/domain/settings_preset/overlay_theme";
 
 
 
@@ -40,7 +41,7 @@ const ProgressContainer = styled('div')({
 const DragArea = styled('div')({
   width: '100%',
   height: '100%',
-  backgroundColor: '#00000092',
+  backgroundColor: '#0000004d',
   '-webkit-app-region': 'drag',
   cursor: 'move',
   position: 'relative',
@@ -182,7 +183,7 @@ export default function OcrOverlay() {
         <OcrTargetRegionDiv key={ region.id } // className="ocr-region" This class can break JPDBReader
           style={{
             border: 'solid',
-            borderColor: overlayFrameVisuals?.border_color || 'red',
+            borderColor: overlayFrameVisuals?.border_color || OVERLAY_ACCENT,
             borderWidth: overlayOcrRegionVisuals?.border_width + 'px',
             top: toCssPercentage( position.top ),
             left: toCssPercentage( position.left ),
@@ -208,8 +209,12 @@ export default function OcrOverlay() {
   return ( <>
     <OverlayFrame id='overlay-frame' className="ignore-mouse"
       sx={{
-        borderColor: overlayFrameVisuals?.border_color || 'red',
-        borderWidth: overlayFrameVisuals?.border_width + 'px',
+        borderColor: overlayFrameVisuals?.border_color || OVERLAY_ACCENT,
+        // The frame is usually hidden; show its edges while it's being moved or resized
+        borderWidth: ( showDragArea ?
+          Math.max( 2, overlayFrameVisuals?.border_width || 0 ) :
+          ( overlayFrameVisuals?.border_width || 0 )
+        ) + 'px',
         contentVisibility: showResults ? 'visible' : 'hidden',
         borderRadius: '12px'
       }}
@@ -221,7 +226,7 @@ export default function OcrOverlay() {
             sx={{
               ml: 2,
               pt: 1,
-              color: overlayFrameVisuals?.border_color || 'red',
+              color: overlayFrameVisuals?.border_color || OVERLAY_ACCENT,
             }}
           >
             The overlay is now movable and resizable!

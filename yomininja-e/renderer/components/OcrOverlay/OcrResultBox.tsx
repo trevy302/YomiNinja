@@ -137,8 +137,8 @@ export default function OcrResultBox( props: {
         adjustedFontSize = ( adjustedFontSize / ocrItem.text.length );
 
     const activeBoxCss: CSSProperties = {
-        backgroundColor: ocrItemBoxVisuals?.background_color || 'black',
-        outlineColor: ocrItemBoxVisuals?.active_border_color || 'red',
+        backgroundColor: ocrItemBoxVisuals?.background_color || 'transparent',
+        outlineColor: ocrItemBoxVisuals?.active_border_color || 'transparent',
         color: ocrItemBoxVisuals?.text.color || 'white',
         fontSize: adjustedFontSize + 'px', // isVertical ? fontSize * 0.8 : fontSize * 0.85
         lineHeight: adjustedFontSize + 'px',
@@ -185,7 +185,7 @@ export default function OcrResultBox( props: {
         "&:hover": activeBoxCss,
         "&.editable": activeBoxCss,
         backgroundColor: ocrItemBoxVisuals.background_color_inactive,
-        outlineColor: ocrItemBoxVisuals?.inactive_border_color || 'red',
+        outlineColor: ocrItemBoxVisuals?.inactive_border_color || 'transparent',
         outlineWidth: ocrItemBoxVisuals?.border_width || '0px',
         borderRadius: ocrItemBoxVisuals?.border_radius || '0rem',
         writingMode: isVertical ? 'vertical-rl' :'inherit',

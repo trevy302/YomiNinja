@@ -183,7 +183,7 @@ export default function AppSettingsVisuals() {
                         size='small'
                         type="number"
                         inputProps={{ style: { textAlign: 'center' } }}                        
-                        value={ overlayFrameVisuals?.border_width || '' }
+                        value={ overlayFrameVisuals?.border_width ?? '' }
                         onInput={ (event: React.ChangeEvent<HTMLInputElement>) => {
                             updateOverlayFrameVisuals({                                
                                 border_width: Number(event.target.value)

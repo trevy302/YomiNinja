@@ -12,6 +12,7 @@ import { get_PpOcrAdapter } from './container_registry/adapters_registry';
 import { WindowManager } from '../../../gyp_modules/window_management/window_manager';
 import { ppOcrAdapterName } from './ocr/ppocr.adapter/ppocr_settings';
 import { getDefaultSettingsPresetProps } from '../domain/settings_preset/default_settings_preset_props';
+import { migrateOverlayVisuals } from '../domain/settings_preset/migrate_overlay_visuals';
 import semver from 'semver';
 import { cloudVisionOcrAdapterName, getCloudVisionDefaultSettings } from './ocr/cloud_vision_ocr.adapter/cloud_vision_ocr_settings';
 import { getGoogleLensDefaultSettings, googleLensOcrAdapterName } from './ocr/google_lens_ocr.adapter/google_lens_ocr_settings';
@@ -153,6 +154,13 @@ export async function initializeApp() {
             }
 
             /// ------------------------------------------------------------------
+
+            if ( settingsPresetUpdateData.overlay?.visuals ) {
+                settingsPresetUpdateData.overlay = {
+                    ...settingsPresetUpdateData.overlay,
+                    visuals: migrateOverlayVisuals( settingsPresetUpdateData.overlay.visuals )!
+                };
+            }
 
             await get_UpdateSettingsPresetUseCaseInstance().execute({
                 ...settingsPresetUpdateData,

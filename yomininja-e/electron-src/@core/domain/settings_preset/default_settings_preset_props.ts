@@ -1,6 +1,9 @@
 import { SettingsPresetInstanceProps } from "../../infra/types/entity_instance.types";
 import { SettingsPreset, SettingsPresetProps,  } from "./settings_preset";
 import crypto from 'crypto';
+import { OVERLAY_ACCENT } from './overlay_theme';
+
+export { OVERLAY_ACCENT };
 
 export function getDefaultSettingsPresetProps(): SettingsPresetProps {
 
@@ -17,22 +20,23 @@ export function getDefaultSettingsPresetProps(): SettingsPresetProps {
         overlay: {
             visuals: {
                 frame: {
-                    border_color: "#e21212", // Red
-                    border_width: 1
+                    border_color: OVERLAY_ACCENT,
+                    border_width: 0
                 },
                 ocr_region: {
                     border_width: 1
                 },
                 ocr_item_box: {
-                    background_color: '#000000', // Black
-                    background_color_inactive: '#5b7eff00', // transparent
-                    inactive_border_color: "#e21212", // Red
-                    active_border_color: "#e21212", // Red
+                    // The drawn text only exists for Yomitan and copying; the game's own text stays visible
+                    background_color: '#00000000', // transparent
+                    background_color_inactive: '#00000000', // transparent
+                    inactive_border_color: '#00000000', // transparent
+                    active_border_color: '#ffffff40', // faint white hairline on hover
                     border_radius: 7,
                     border_width: 1,
                     size_factor: 5,
                     text: {
-                        color: "#ffffff", // White
+                        color: '#00000000', // transparent
                         font_size_factor: 100,
                         font_weight: 400,
                         letter_spacing: 1,
@@ -56,8 +60,8 @@ export function getDefaultSettingsPresetProps(): SettingsPresetProps {
                         }
                     },
                     selected_text: {
-                        color: '#ffffff', // White
-                        background_color: '#c50b0b' // Red
+                        color: '#00000000', // transparent
+                        background_color: '#7aa2f766' // soft blue
                     }
                 },
                 mouse: {
@@ -65,7 +69,7 @@ export function getDefaultSettingsPresetProps(): SettingsPresetProps {
                     custom_cursor_size: 30
                 },
                 indicators: {
-                    processing_icon_color: '#c50b0b' // Red
+                    processing_icon_color: OVERLAY_ACCENT
                 }
             },
             hotkeys: {

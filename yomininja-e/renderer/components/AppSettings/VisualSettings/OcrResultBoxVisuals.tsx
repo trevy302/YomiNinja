@@ -431,7 +431,7 @@ export default function OcrResultBoxVisualSettings( props: OcrResultBoxVisualSet
                 size='small'
                 type="number"
                 inputProps={{ style: { textAlign: 'center' } }}                        
-                value={ ocrItemBoxVisuals?.border_width || '' }
+                value={ ocrItemBoxVisuals?.border_width ?? '' }
                 onInput={ (event: React.ChangeEvent<HTMLInputElement>) => {
                     updateOcrItemBoxVisuals({                                
                         border_width: Number(event.target.value)
